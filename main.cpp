@@ -453,19 +453,19 @@ void showBooks() {
 
     cout << "\n=== All Books in Library ===\n";
     cout << left
-         << setw(5)  << "ID"
+         << setw(10)  << "ID"
          << setw(27) << "Title"
-         << setw(15) << "Author"
+         << setw(27) << "Author"
          << setw(8)  << "Year"
          << "Status\n";
 
-    cout << string(70, '-') << endl;
+    cout << string(100, '-') << endl;
 
     while (curr) {
         cout << left
-             << setw(5)  << curr->data.id
+             << setw(10)  << curr->data.id
              << setw(27) << curr->data.title
-             << setw(15) << curr->data.author
+             << setw(27) << curr->data.author
              << setw(8)  << curr->data.year;
 
         if (curr->data.available) {
@@ -478,7 +478,7 @@ void showBooks() {
         curr = curr->next;
     }
 
-    cout << string(70, '-') << endl;
+    cout << string(100, '-') << endl;
 
 }
 
