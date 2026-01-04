@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <iomanip>
 using namespace std;
 
 /* ============================
@@ -450,24 +451,35 @@ void showBooks() {
         return;
     }
 
-    cout << "\n=== All Books in Library ===" << endl;
-    cout << "----------------------------------------------------------------" << endl;
-    
+    cout << "\n=== All Books in Library ===\n";
+    cout << left
+         << setw(5)  << "ID"
+         << setw(27) << "Title"
+         << setw(15) << "Author"
+         << setw(8)  << "Year"
+         << "Status\n";
+
+    cout << string(70, '-') << endl;
+
     while (curr) {
-        cout << curr->data.id << " | "
-             << curr->data.title.substr(0, 25) << " | "
-             << curr->data.author.substr(0, 12) << " | "
-             << curr->data.year << " | ";
-        
+        cout << left
+             << setw(5)  << curr->data.id
+             << setw(27) << curr->data.title
+             << setw(15) << curr->data.author
+             << setw(8)  << curr->data.year;
+
         if (curr->data.available) {
             cout << "Available";
         } else {
-            cout << "Borrowed by " << curr->data.borrower.substr(0, 15);
+            cout << "Borrowed by " << curr->data.borrower;
         }
         cout << endl;
+
         curr = curr->next;
     }
-    cout << "----------------------------------------------------------------" << endl;
+
+    cout << string(70, '-') << endl;
+
 }
 
 void showQueue() {
