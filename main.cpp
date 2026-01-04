@@ -149,6 +149,22 @@ bool popAction(Action& act) {
     return true;
 }
 
+void displayHistory() {
+    if (stackTop == -1) {
+        cout << "No history available." << endl;
+        return;
+    }
+    
+    cout << "\n=== Operation History (Last 5) ===" << endl;
+    for (int i = stackTop; i >= 0; i--) {
+        string opType = (undoStack[i].type == 1) ? "Add Book" : "Delete Book";
+        cout << "Operation: " << opType 
+             << " | Book: " << undoStack[i].snapshot.title
+             << " (ID: " << undoStack[i].snapshot.id << ")" << endl;
+    }
+    cout << "==================================" << endl;
+}
+
 /* ============================
    Book List Functions
 ============================ */
@@ -162,6 +178,180 @@ BookNode* findBook(int id) {
     return nullptr;
 }
 
+bool borrowerHasBook(int bookId, string borrowerName) {
+    BookNode* book = findBook(bookId);
+    return (book && !book->data.available && book->data.borrower == borrowerName);
+}
+
+bool hasPendingRequest(int bookId, string borrowerName) {
+    for (int i = 0; i < queueSize; i++) {
+        if (borrowQueue[i].bookId == bookId && borrowQueue[i].borrowerName == borrowerName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* ============================
+   Core Library Functions
+============================ */
+void addBook() {
+    Book b;
+    cout << "Enter Book ID: ";
+    cin >> b.id;
+
+    if (findBook(b.id)) {
+        cout << "Error: Book with this ID already exists!" << endl;
+        return;
+    }
+
+    cin.ignore();
+    cout << "Book Title: ";
+    getline(cin, b.title);
+    cout << "Author: ";
+    getline(cin, b.author);
+    cout << "Publication Year: ";
+    cin >> b.year;
+
+    b.available = true;
+    b.borrower = "";
+
+    BookNode* node = new BookNode{b, nullptr};
+
+    if (!head) {
+        head = node;
+    } else {
+        BookNode* curr = head;
+        while (curr->next)
+            curr = curr->next;
+        curr->next = node;
+    }
+
+    pushAction({1, b});
+    cout << "Book added successfully!" << endl;
+}
+
+void deleteBook() {
+    int id;
+    cout << "Enter Book ID to delete: ";
+    cin >> id;
+
+    BookNode* curr = head;
+    BookNode* prev = nullptr;
+
+    while (curr && curr->data.id != id) {
+        prev = curr;
+        curr = curr->next;
+    }
+
+    if (!curr) {
+        cout << "Book not found!" << endl;
+        return;
+    }
+    
+    if (!curr->data.available) {
+        cout << "Error: Cannot delete a borrowed book!" << endl;
+        return;
+    }
+
+    removeAllRequestsForBook(id);
+    pushAction({2, curr->data});
+
+    if (!prev)
+        head = curr->next;
+    else
+        prev->next = curr->next;
+
+    delete curr;
+    cout << "Book and all its pending requests deleted successfully!" << endl;
+}
+
+void searchBook() {
+    int id;
+    cout << "Enter Book ID to search: ";
+    cin >> id;
+
+    BookNode* book = findBook(id);
+    if (!book) {
+        cout << "Book not found!" << endl;
+        return;
+    }
+
+    cout << "\n=== Book Details ===" << endl;
+    cout << "ID: " << book->data.id << endl;
+    cout << "Title: " << book->data.title << endl;
+    cout << "Author: " << book->data.author << endl;
+    cout << "Year: " << book->data.year << endl;
+    cout << "Status: " << (book->data.available ? "Available" : string("Borrowed by ") + book->data.borrower) << endl;
+    cout << "===================" << endl;
+}
+
+void borrowBook() {
+    int id;
+    string borrowerName;
+    
+    cout << "Enter Book ID to borrow: ";
+    cin >> id;
+    cin.ignore();
+    cout << "Borrower Name: ";
+    getline(cin, borrowerName);
+
+    BookNode* book = findBook(id);
+    if (!book) {
+        cout << "Book not found!" << endl;
+        return;
+    }
+
+    if (borrowerHasBook(id, borrowerName)) {
+        cout << "You already have this book borrowed!" << endl;
+        return;
+    }
+
+    if (hasPendingRequest(id, borrowerName)) {
+        cout << "You already have a pending request for this book!" << endl;
+        return;
+    }
+
+    if (book->data.available) {
+        book->data.available = false;
+        book->data.borrower = borrowerName;
+        cout << "Book successfully borrowed by " << borrowerName << "!" << endl;
+    } else {
+        enqueue(id, borrowerName);
+    }
+}
+
+void returnBook() {
+    int id;
+    
+    cout << "Enter Book ID to return: ";
+    cin >> id;
+    
+    BookNode* book = findBook(id);
+    if (!book) {
+        cout << "Book not found!" << endl;
+        return;
+    }
+
+    if (book->data.available) {
+        cout << "This book is already available!" << endl;
+        return;
+    }
+
+    cout << "Book \"" << book->data.title << "\" returned." << endl;
+    
+    string nextRequester = getFirstRequester(id);
+    
+    if (nextRequester != "") {
+        book->data.borrower = nextRequester;
+        cout << "Book automatically borrowed by " << nextRequester << " (next in queue)." << endl;
+        removeFirstRequestForBook(id);
+    } else {
+        book->data.available = true;
+        book->data.borrower = "";
+    }
+}
+
 /* ============================
    Main Function
 ============================ */
@@ -172,13 +362,24 @@ int main() {
     int choice;
     do {
         cout << "\n=== LIBRARY MANAGEMENT SYSTEM ===" << endl;
+        cout << "1. Add Book" << endl;
+        cout << "2. Delete Book" << endl;
+        cout << "3. Search Book" << endl;
+        cout << "6. Borrow Book" << endl;
+        cout << "7. Return Book" << endl;
         cout << "0. Exit" << endl;
         cout << "Enter your choice: ";
         cin >> choice;
 
-        if (choice != 0)
-            cout << "Feature under development." << endl;
-
+        switch (choice) {
+            case 1: addBook(); break;
+            case 2: deleteBook(); break;
+            case 3: searchBook(); break;
+            case 6: borrowBook(); break;
+            case 7: returnBook(); break;
+            case 0: cout << "Goodbye!" << endl; break;
+            default: cout << "Invalid choice!" << endl;
+        }
     } while (choice != 0);
 
     return 0;
