@@ -88,6 +88,7 @@ void enqueue(int bookId, string borrowerName) {
 bool removeFirstRequestForBook(int bookId) {
     for (int i = 0; i < queueSize; i++) {
         if (borrowQueue[i].bookId == bookId) {
+            // Shift all elements after i one position left
             for (int j = i; j < queueSize - 1; j++) {
                 borrowQueue[j] = borrowQueue[j + 1];
             }
@@ -131,6 +132,7 @@ void initStack() {
 
 void pushAction(Action act) {
     if (stackTop == 4) {
+        // Shift all elements left (remove oldest)
         for (int i = 0; i < 4; i++) {
             undoStack[i] = undoStack[i + 1];
         }
@@ -218,6 +220,7 @@ void addBook() {
 
     BookNode* node = new BookNode{b, nullptr};
 
+    // Add to end of list
     if (!head) {
         head = node;
     } else {
@@ -254,9 +257,13 @@ void deleteBook() {
         return;
     }
 
+    // Remove all pending requests for this book
     removeAllRequestsForBook(id);
+    
+    // Save for undo
     pushAction({2, curr->data});
 
+    // Remove from list
     if (!prev)
         head = curr->next;
     else
@@ -286,6 +293,39 @@ void searchBook() {
     cout << "===================" << endl;
 }
 
+void sortBooks(int mode) {
+    if (!head || !head->next) {
+        cout << "Not enough books to sort." << endl;
+        return;
+    }
+
+    bool swapped;
+    do {
+        swapped = false;
+        BookNode* curr = head;
+        while (curr->next) {
+            bool shouldSwap = false;
+            
+            if (mode == 1) { // Sort by ID
+                shouldSwap = (curr->data.id > curr->next->data.id);
+            } else { // Sort by Year
+                shouldSwap = (curr->data.year > curr->next->data.year);
+            }
+            
+            if (shouldSwap) {
+                Book temp = curr->data;
+                curr->data = curr->next->data;
+                curr->next->data = temp;
+                swapped = true;
+            }
+            curr = curr->next;
+        }
+    } while (swapped);
+
+    cout << "Books sorted successfully by " 
+         << (mode == 1 ? "ID" : "Publication Year") << "!" << endl;
+}
+
 void borrowBook() {
     int id;
     string borrowerName;
@@ -302,11 +342,13 @@ void borrowBook() {
         return;
     }
 
+    // Check if borrower already has this book
     if (borrowerHasBook(id, borrowerName)) {
         cout << "You already have this book borrowed!" << endl;
         return;
     }
 
+    // Check for duplicate pending request
     if (hasPendingRequest(id, borrowerName)) {
         cout << "You already have a pending request for this book!" << endl;
         return;
@@ -327,6 +369,7 @@ void returnBook() {
     cout << "Enter Book ID to return: ";
     cin >> id;
     
+
     BookNode* book = findBook(id);
     if (!book) {
         cout << "Book not found!" << endl;
@@ -340,15 +383,107 @@ void returnBook() {
 
     cout << "Book \"" << book->data.title << "\" returned." << endl;
     
+    // Check for pending requests
     string nextRequester = getFirstRequester(id);
     
     if (nextRequester != "") {
+        // Give book to next requester
         book->data.borrower = nextRequester;
         cout << "Book automatically borrowed by " << nextRequester << " (next in queue)." << endl;
+        
+        // Remove this request from queue
         removeFirstRequestForBook(id);
     } else {
+        // No pending requests - make book available
         book->data.available = true;
         book->data.borrower = "";
+    }
+}
+
+void undo() {
+    Action act;
+    if (!popAction(act)) {
+        cout << "No actions to undo!" << endl;
+        return;
+    }
+
+    string message;
+    
+    if (act.type == 1) { // Undo Add (delete the book)
+        BookNode* curr = head;
+        BookNode* prev = nullptr;
+        while (curr && curr->data.id != act.snapshot.id) {
+            prev = curr;
+            curr = curr->next;
+        }
+        
+        if (curr) {
+            // Also remove pending requests
+            removeAllRequestsForBook(curr->data.id);
+            
+            if (!prev) head = curr->next;
+            else prev->next = curr->next;
+            
+            delete curr;
+            message = "Add operation undone. Book removed.";
+        }
+    }
+    else if (act.type == 2) { // Undo Delete (restore the book)
+        if (findBook(act.snapshot.id)) {
+            cout << "Cannot undo: A book with ID " << act.snapshot.id 
+                 << " already exists!" << endl;
+            return;
+        } else {
+            BookNode* node = new BookNode{act.snapshot, head};
+            head = node;
+            message = "Delete operation undone. Book restored.";
+        }
+    }
+
+    cout << "SUCCESS: " << message << endl;
+}
+
+void showBooks() {
+    BookNode* curr = head;
+    if (!curr) {
+        cout << "Library is empty!" << endl;
+        return;
+    }
+
+    cout << "\n=== All Books in Library ===" << endl;
+    cout << "----------------------------------------------------------------" << endl;
+    
+    while (curr) {
+        cout << curr->data.id << " | "
+             << curr->data.title.substr(0, 25) << " | "
+             << curr->data.author.substr(0, 12) << " | "
+             << curr->data.year << " | ";
+        
+        if (curr->data.available) {
+            cout << "Available";
+        } else {
+            cout << "Borrowed by " << curr->data.borrower.substr(0, 15);
+        }
+        cout << endl;
+        curr = curr->next;
+    }
+    cout << "----------------------------------------------------------------" << endl;
+}
+
+void showQueue() {
+    if (isQueueEmpty()) {
+        cout << "No pending borrow requests." << endl;
+        return;
+    }
+    
+    cout << "\n=== Pending Borrow Requests ===" << endl;
+    for (int i = 0; i < queueSize; i++) {
+        BookNode* book = findBook(borrowQueue[i].bookId);
+        string bookTitle = book ? book->data.title : "Book not found";
+        
+        cout << i+1 << ". Book: " << bookTitle
+             << " (ID: " << borrowQueue[i].bookId << ")"
+             << " - Requester: " << borrowQueue[i].borrowerName << endl;
     }
 }
 
@@ -365,8 +500,14 @@ int main() {
         cout << "1. Add Book" << endl;
         cout << "2. Delete Book" << endl;
         cout << "3. Search Book" << endl;
+        cout << "4. Sort by ID" << endl;
+        cout << "5. Sort by Year" << endl;
         cout << "6. Borrow Book" << endl;
         cout << "7. Return Book" << endl;
+        cout << "8. Show All Books" << endl;
+        cout << "9. Undo Last Operation" << endl;
+        cout << "10. Show Operation History" << endl;
+        cout << "11. Show Pending Requests" << endl;
         cout << "0. Exit" << endl;
         cout << "Enter your choice: ";
         cin >> choice;
@@ -375,12 +516,26 @@ int main() {
             case 1: addBook(); break;
             case 2: deleteBook(); break;
             case 3: searchBook(); break;
+            case 4: sortBooks(1); break;
+            case 5: sortBooks(2); break;
             case 6: borrowBook(); break;
             case 7: returnBook(); break;
+            case 8: showBooks(); break;
+            case 9: undo(); break;
+            case 10: displayHistory(); break;
+            case 11: showQueue(); break;
             case 0: cout << "Goodbye!" << endl; break;
             default: cout << "Invalid choice!" << endl;
         }
     } while (choice != 0);
+
+    // Cleanup memory
+    BookNode* curr = head;
+    while (curr) {
+        BookNode* temp = curr;
+        curr = curr->next;
+        delete temp;
+    }
 
     return 0;
 }
